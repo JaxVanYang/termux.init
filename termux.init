@@ -1,0 +1,232 @@
+#!/bin/bash
+# An interactive initialization script for Termux
+
+set -e
+
+################ Initialize Variables ################
+packages="curl wget git tree build-essential openssh dnsutils \
+	iproute2 zsh shtool"
+editors="vim neovim emacs"
+packages_need=""
+packages_install=""
+
+################ Functions ###############
+
+welcome() {
+	echo "################ Welcome to termux.init ################"
+	echo
+	echo "This script helps you to quickly set up your Termux with:"
+	echo "	1. Termux repository,"
+	echo "	2. Editors & basic utilities,"
+	echo "	3. Oh My Zsh,"
+	echo "	4. And so on..."
+	echo "It aims to make a development environment you can jump"
+	echo "into right away. Its basic function is installing packages."
+	echo "You should try it if you want to install basic packages"
+	echo "by choosing options rather than manually install them"
+	echo "one by one."
+}
+
+package_installed() {
+	if [ ! $# -eq 1 ]; then
+		return 1
+	fi
+	[[ $(dpkg -s $1 2> /dev/null) == *installed* ]]
+}
+
+setup_repo() {
+	echo
+	echo "Would you like to choose a Termux repository first? It may"
+	echo "improve package download speed, if you haven't run"
+	echo '"termux-change-repo" yet.'
+	read -p "Choose a Termux repository? [y/N] " reply
+	if [[ $reply == [yY] ]]; then
+		termux-change-repo
+	fi
+}
+
+install_packages() {
+	# Choose Editors & Basic Utilities
+	echo
+	echo "Select your favorite editor (vim, neovim, emacs):"
+	for editor in $editors; do
+		if package_installed $editor; then
+			echo "$editor installed already."
+		else
+			read -p "Install $editor? [y/N] " reply
+			if [[ $reply == [yY] ]]; then
+				packages_install=$packages_install"$editor "
+			fi
+		fi
+	done
+
+	echo
+	echo "Checking basic packages to install..."
+	for package in $packages; do
+		if ! package_installed $package; then
+			packages_need=$packages_need"$package "
+		fi
+	done
+
+	if [ -n "$packages_need" ]; then
+		echo "The following basic packages need be installed:"
+		echo -e "$packages_need"
+		echo "Do you want to install them all or choose each one by one?"
+		read -p "Y for installing all, N for choosing. [y/N] " reply
+		if [[ $reply == [yY] ]]; then
+			packages_install=$packages_install"$packages_need "
+		else
+			echo -e "\nChoosing packages to install..."
+			for package in $packages_need; do
+				read -p "Do you want to install $package? [y/N] " reply
+				if [[ $reply == [yY] ]]; then
+					packages_install=$packages_install"$package "
+				fi
+			done
+		fi
+	else
+		echo "No basic package need to be installed."
+	fi
+
+	if [ -n "$packages_install" ]; then
+		echo "The following packages will be installed (including selected editors):"
+		echo -e "$packages_install"
+		read -p "Continue? [y/N] " reply
+		if [[ $reply == [yY] ]]; then
+			pkg install $packages_install -y
+		fi
+	else
+		echo "No package will be installed."
+	fi
+}
+
+setup_omz() {
+	echo
+	echo "Checking Oh My Zsh status..."
+	if [ -d $HOME/.oh-my-zsh ] || [ -d "$ZSH" ]; then
+		echo "You have Oh My Zsh installed."
+	else
+		echo "Checking Oh My Zsh requirement..."
+		require=""
+		for package in git zsh; do
+			if ! package_installed $package; then
+				require="$require $package"
+			fi
+		done
+		if [ -n "$require" ]; then
+			echo "You don't have these required packages ($require) installed."
+			echo "Skip installing Oh My Zsh."
+		else
+			echo "Install Oh My Zsh (Based on Termux-ohmyzsh: https://github.com/Cabbagec/termux-ohmyzsh)? [y/N] "
+			read reply
+			if [[ $reply == [yY] ]]; then
+				echo "Installing Oh My Zsh..."
+				termux-setup-storage
+
+				git clone https://github.com/Cabbagec/termux-ohmyzsh.git "$HOME/termux-ohmyzsh" --depth 1
+
+				mv "$HOME/.termux" "$HOME/.termux.bak.$(date +%Y.%m.%d-%H:%M:%S)"
+				cp -R "$HOME/termux-ohmyzsh/.termux" "$HOME/.termux"
+
+				git clone https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh" --depth 1
+				mv "$HOME/.zshrc" "$HOME/.zshrc.bak.$(date +%Y.%m.%d-%H:%M:%S)"
+				cp "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" "$HOME/.zshrc"
+				sed -i '/^ZSH_THEME/d' "$HOME/.zshrc"
+				sed -i '1iZSH_THEME="robbyrussell"' "$HOME/.zshrc"
+				echo "alias chcolor='$HOME/.termux/colors.sh'" >> "$HOME/.zshrc"
+				echo "alias chfont='$HOME/.termux/fonts.sh'" >> "$HOME/.zshrc"
+
+				git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$HOME/.zsh-syntax-highlighting" --depth 1
+				echo "source $HOME/.zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" >> "$HOME/.zshrc"
+
+				chsh -s zsh
+
+				echo "oh-my-zsh install complete!\nChoose your color scheme now~"
+				$HOME/.termux/colors.sh
+
+				echo "Choose your font now~"
+				$HOME/.termux/fonts.sh
+
+				echo "$HOME/termux-ohmyzsh/ is used in the installation, you can remove it now"
+				echo "You should restart Termux later~"
+			fi
+		fi
+	fi
+}
+
+setup_ssh() {
+	echo
+	echo "Checking OpenSSH status..."
+	if ! package_installed openssh; then
+		echo "OpenSSH not installed. Skip OpenSSH setup."
+		return
+	fi
+
+	echo "You have OpenSSH installed."
+	echo "Checking key pairs..."
+	if ls $HOME/.ssh/id_* &> /dev/null; then
+		echo "It seems that you already have some key pairs."
+	else
+		echo "It seems that you don't have any key pairs."
+		read -p "Would you like to generate one (Using Ed25519)? [y/N] " reply
+		if [[ $reply == [yY] ]]; then
+			read -p "Enter comment for your key, email is recommended. Leave blank to use default comment: " comment
+			if [ -n "$comment" ]; then
+				ssh-keygen -t ed25519 -C "$comment"
+			else
+				ssh-keygen -t ed25519
+			fi
+		fi
+	fi
+}
+
+setup_git() {
+	echo
+	echo "Checking Git status..."
+	if ! package_installed git; then
+		echo "Git not installed. Skip Git setup."
+		return
+	fi
+
+	echo "You have Git installed."
+	echo "Checking baisc global configuration..."
+	if git config --global init.defaultbranch &> /dev/null; then
+		echo "Default branch set."
+	else
+		echo "Default branch not set."
+		read -p "Please enter default branch name (leave blank to skip): " reply
+		if [ -n "$reply" ]; then
+			git config --global init.defaultBranch "$reply"
+		fi
+	fi
+	if git config --global user.email &> /dev/null; then
+		echo "User email set."
+	else
+		echo "User email not set."
+		read -p "Please enter your email (leave blank to skip): " reply
+		if [ -n "$reply" ]; then
+			git config --global user.email "$reply"
+		fi
+	fi
+	if git config --global user.name &> /dev/null; then
+		echo "User name set."
+	else
+		echo "User name not set."
+		read -p "Please enter your name (leave blank to skip): " reply
+		if [ -n "$reply" ]; then
+			git config --global user.name "$reply"
+		fi
+	fi
+}
+
+main() {
+	welcome
+
+	setup_repo
+	install_packages
+	setup_omz
+	setup_ssh
+	setup_git
+}
+
+main "$@"
