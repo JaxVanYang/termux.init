@@ -2,6 +2,8 @@
 
 Set up your Termux on the fly.
 
+![Screenshot](images/screenshot.png)
+
 ## Usage
 
 | Method | Command |
