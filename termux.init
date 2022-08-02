@@ -1,14 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # An interactive initialization script for Termux
 
 set -e
 
 ################ Initialize Variables ################
-packages="curl wget git tree build-essential openssh dnsutils \
-	iproute2 zsh shtool"
-editors="vim neovim emacs"
+packages=(curl wget git tree build-essential openssh \
+	dnsutils iproute2 zsh shtool)
+editors=(vim neovim emacs)
 packages_need=""
 packages_install=""
+zsh_custom=${ZSH_CUSTOM:-${ZSH}/custom}
+zsh_custom_plugins=$zsh_custom/plugins
+
+echo ${packages[*]}
+echo ${editors[*]}
 
 ################ Functions ###############
 
@@ -16,10 +21,10 @@ welcome() {
 	echo "################ Welcome to termux.init ################"
 	echo
 	echo "This script helps you to quickly set up your Termux with:"
-	echo "	1. Termux repository,"
-	echo "	2. Editors & basic utilities,"
-	echo "	3. Oh My Zsh,"
-	echo "	4. And so on..."
+	echo -e "\t1. Termux repository,"
+	echo -e "\t2. Editors & basic utilities,"
+	echo -e "\t3. Oh My Zsh,"
+	echo -e "\t4. And so on..."
 	echo "It aims to make a development environment you can jump"
 	echo "into right away. Its basic function is installing packages."
 	echo "You should try it if you want to install basic packages"
@@ -34,13 +39,42 @@ package_installed() {
 	[[ $(dpkg -s $1 2> /dev/null) == *installed* ]]
 }
 
+cp_backup() {
+	local bak="$*.bak.$(date +%Y.%m.%d-%H:%M:%S)"
+	echo "Backup $* to $bak..."
+	cp -r "$*" "$bak"
+}
+
+in_array() {
+	# Usage: in_array "$item" "${arr[@]}"
+	item="$1"
+	while [ $# -gt 1 ]; do
+		shift
+		if [ "$item" = "$1" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+remove_array_dups() {
+	# Usage: remove_array_dups "${arr[@]}"
+	declare -A tmp_array
+
+	for i in "$@"; do
+	[[ $i ]] && IFS=" " tmp_array["${i:- }"]=1
+	done
+
+	echo "${!tmp_array[@]}"
+}
+
 setup_repo() {
 	echo
 	echo "Would you like to choose a Termux repository first? It may"
 	echo "improve package download speed, if you haven't run"
 	echo '"termux-change-repo" yet.'
 	read -p "Choose a Termux repository? [y/N] " reply
-	if [[ $reply == [yY] ]]; then
+	if [[ "$reply" == [yY] ]]; then
 		termux-change-repo
 	fi
 }
@@ -49,38 +83,38 @@ install_packages() {
 	# Choose Editors & Basic Utilities
 	echo
 	echo "Select your favorite editor (vim, neovim, emacs):"
-	for editor in $editors; do
+	for editor in ${editors[@]}; do
 		if package_installed $editor; then
 			echo "$editor installed already."
 		else
 			read -p "Install $editor? [y/N] " reply
-			if [[ $reply == [yY] ]]; then
-				packages_install=$packages_install"$editor "
+			if [[ "$reply" == [yY] ]]; then
+				packages_install+=($editor)
 			fi
 		fi
 	done
 
 	echo
 	echo "Checking basic packages to install..."
-	for package in $packages; do
+	for package in ${packages[@]}; do
 		if ! package_installed $package; then
-			packages_need=$packages_need"$package "
+			packages_need+=($package)
 		fi
 	done
 
 	if [ -n "$packages_need" ]; then
 		echo "The following basic packages need be installed:"
-		echo -e "$packages_need"
+		echo -e "\t$packages_need"
 		echo "Do you want to install them all or choose each one by one?"
 		read -p "Y for installing all, N for choosing. [y/N] " reply
-		if [[ $reply == [yY] ]]; then
-			packages_install=$packages_install"$packages_need "
+		if [[ "$reply" == [yY] ]]; then
+			packages_install+=($packages_need)
 		else
 			echo -e "\nChoosing packages to install..."
 			for package in $packages_need; do
 				read -p "Do you want to install $package? [y/N] " reply
-				if [[ $reply == [yY] ]]; then
-					packages_install=$packages_install"$package "
+				if [[ "$reply" == [yY] ]]; then
+					packages_install+=($package)
 				fi
 			done
 		fi
@@ -90,9 +124,9 @@ install_packages() {
 
 	if [ -n "$packages_install" ]; then
 		echo "The following packages will be installed (including selected editors):"
-		echo -e "$packages_install"
+		echo -e "\t$packages_install"
 		read -p "Continue? [y/N] " reply
-		if [[ $reply == [yY] ]]; then
+		if [[ "$reply" == [yY] ]]; then
 			pkg install $packages_install -y
 		fi
 	else
@@ -105,52 +139,118 @@ setup_omz() {
 	echo "Checking Oh My Zsh status..."
 	if [ -d $HOME/.oh-my-zsh ] || [ -d "$ZSH" ]; then
 		echo "You have Oh My Zsh installed."
-	else
-		echo "Checking Oh My Zsh requirement..."
-		require=""
-		for package in git zsh; do
-			if ! package_installed $package; then
-				require="$require $package"
+		return
+	fi
+
+	echo "Checking Oh My Zsh requirement..."
+	require=""
+	for package in git zsh; do
+		if ! package_installed $package; then
+			require="$require $package"
+		fi
+	done
+	if [ -n "$require" ]; then
+		echo "You don't have these required packages ($require) installed."
+		echo "Skip installing Oh My Zsh."
+		return 1
+	fi
+
+	echo "Install Oh My Zsh (based on Termux-ohmyzsh: https://github.com/Cabbagec/termux-ohmyzsh)? [y/N] "
+	read reply
+	if [[ ! "$reply" == [yY] ]]; then
+		return 1
+	fi
+	echo "Installing Oh My Zsh..."
+	termux-setup-storage
+
+	git clone https://github.com/Cabbagec/termux-ohmyzsh.git "$HOME/termux-ohmyzsh" --depth 1
+
+	cp_backup "$HOME/.termux"
+	cp -R "$HOME/termux-ohmyzsh/.termux" "$HOME/.termux"
+
+	git clone https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh" --depth 1
+	cp_backup "$HOME/.zshrc"
+	cp "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" "$HOME/.zshrc"
+	sed -i '/^ZSH_THEME/d' "$HOME/.zshrc"
+	sed -i '1iZSH_THEME="robbyrussell"' "$HOME/.zshrc"
+	echo "alias chcolor='$HOME/.termux/colors.sh'" >> "$HOME/.zshrc"
+	echo "alias chfont='$HOME/.termux/fonts.sh'" >> "$HOME/.zshrc"
+
+	# git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$HOME/.zsh-syntax-highlighting" --depth 1
+	# echo "source $HOME/.zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" >> "$HOME/.zshrc"
+
+	chsh -s zsh
+
+	echo "oh-my-zsh install complete!\nChoose your color scheme now~"
+	$HOME/.termux/colors.sh
+
+	echo "Choose your font now~"
+	$HOME/.termux/fonts.sh
+
+	echo "$HOME/termux-ohmyzsh/ is used in the installation, you can remove it now"
+	echo "You should restart Termux later~"
+}
+
+setup_omz_plugins() {
+	echo "Checking Oh My Zsh plugins..."
+	local plugins=($zsh_custom_plugins/*)
+	local plugins_name=()
+	for plugin in "${plugins[@]}"; do
+		local name=$(basename $plugin)
+		if [ $name = "example" ]; then
+			continue
+		fi
+		plugins_name+=($name)
+	done
+	echo "You have following custom plugins installed:"
+	echo -e "\t${plugins_name[*]}"
+	echo "Checking recommend plugins..."
+	if ! in_array "zsh-autosuggestions" "${plugins_name[@]}"; then
+		echo "zsh-autosuggestions not installed."
+		read -p "Do you want to install it? [y/N] " reply
+		if [[ "$reply" == [yY] ]]; then
+			git clone https://github.com/zsh-users/zsh-autosuggestions.git "$zsh_custom_plugins/zsh-autosuggestions" --depth 1
+			plugins_name+=(zsh-autosuggestions)
+		fi
+	fi
+	if ! in_array "zsh-z" "${plugins_name[@]}"; then
+		echo "zsh-z not installed."
+		read -p "Do you want to install it? [y/N] " reply
+		if [[ "$reply" == [yY] ]]; then
+			git clone https://github.com/agkozak/zsh-z.git "$zsh_custom_plugins/zsh-z" --depth 1
+			plugins_name+=(zsh-z)
+		fi
+	fi
+	if ! in_array "zsh-syntax-highlighting" "${plugins_name[@]}"; then
+		echo "zsh-syntax-highlighting not installed."
+		read -p "Do you want to install it? [y/N] " reply
+		if [[ "$reply" == [yY] ]]; then
+			git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$zsh_custom_plugins/zsh-syntax-highlighting" --depth 1
+			plugins_name+=(zsh-syntax-highlighting)
+		fi
+	fi
+
+	echo "You have following custom plugins installed now:"
+	echo -e "\t${plugins_name[*]}"
+	read -p "Do you want to enable them all (you can tweak in ~/.zshrc later)? [y/N] " reply
+	if [[ "$reply" == [yY] ]]; then
+		# this will override previous difination
+		eval $(grep "^plugins=(.*)$" ~/.zshrc)
+		plugins+=(${plugins_name[@]})
+		plugins=$(remove_array_dups "${plugins[@]}")
+
+		# zsh-syntax-highlighting should always be the last plugin
+		for ((i = 0; i < ${#plugins[@]}; ++i)); do
+			if [ "${plugins[i]}" = "zsh-syntax-highlighting" ]; then
+				plugins[$i]="${plugins[-1]}"
+				plugins[-1]="zsh-syntax-highlighting"
+				break
 			fi
 		done
-		if [ -n "$require" ]; then
-			echo "You don't have these required packages ($require) installed."
-			echo "Skip installing Oh My Zsh."
-		else
-			echo "Install Oh My Zsh (Based on Termux-ohmyzsh: https://github.com/Cabbagec/termux-ohmyzsh)? [y/N] "
-			read reply
-			if [[ $reply == [yY] ]]; then
-				echo "Installing Oh My Zsh..."
-				termux-setup-storage
 
-				git clone https://github.com/Cabbagec/termux-ohmyzsh.git "$HOME/termux-ohmyzsh" --depth 1
-
-				mv "$HOME/.termux" "$HOME/.termux.bak.$(date +%Y.%m.%d-%H:%M:%S)"
-				cp -R "$HOME/termux-ohmyzsh/.termux" "$HOME/.termux"
-
-				git clone https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh" --depth 1
-				mv "$HOME/.zshrc" "$HOME/.zshrc.bak.$(date +%Y.%m.%d-%H:%M:%S)"
-				cp "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" "$HOME/.zshrc"
-				sed -i '/^ZSH_THEME/d' "$HOME/.zshrc"
-				sed -i '1iZSH_THEME="robbyrussell"' "$HOME/.zshrc"
-				echo "alias chcolor='$HOME/.termux/colors.sh'" >> "$HOME/.zshrc"
-				echo "alias chfont='$HOME/.termux/fonts.sh'" >> "$HOME/.zshrc"
-
-				git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$HOME/.zsh-syntax-highlighting" --depth 1
-				echo "source $HOME/.zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" >> "$HOME/.zshrc"
-
-				chsh -s zsh
-
-				echo "oh-my-zsh install complete!\nChoose your color scheme now~"
-				$HOME/.termux/colors.sh
-
-				echo "Choose your font now~"
-				$HOME/.termux/fonts.sh
-
-				echo "$HOME/termux-ohmyzsh/ is used in the installation, you can remove it now"
-				echo "You should restart Termux later~"
-			fi
-		fi
+		cp_backup ~/.zshrc
+		sed -i "s/^plugins=(.*)$/plugins=(${plugins})/" ~/.zshrc
+		echo "Complete enabling."
 	fi
 }
 
@@ -169,7 +269,7 @@ setup_ssh() {
 	else
 		echo "It seems that you don't have any key pairs."
 		read -p "Would you like to generate one (Using Ed25519)? [y/N] " reply
-		if [[ $reply == [yY] ]]; then
+		if [[ "$reply" == [yY] ]]; then
 			read -p "Enter comment for your key, email is recommended. Leave blank to use default comment: " comment
 			if [ -n "$comment" ]; then
 				ssh-keygen -t ed25519 -C "$comment"
@@ -224,7 +324,12 @@ main() {
 
 	setup_repo
 	install_packages
-	setup_omz
+	
+	# Use setup_omz to determine if Oh My Zsh installed
+	if setup_omz; then
+		setup_omz_plugins
+	fi
+
 	setup_ssh
 	setup_git
 }
