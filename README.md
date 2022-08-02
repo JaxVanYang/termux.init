@@ -18,10 +18,16 @@ Set up your Termux on the fly.
 
 - [x] Install editors & basic utilities.
 
-- [x] Setup Oh My Zsh.
+- [x] Setup Oh My Zsh (based on [Termux-ohmyzsh](https://github.com/Cabbagec/termux-ohmyzsh)).
+
+- [x] Setup common Oh My Zsh plugins.
 
 - [x] Setup OpenSSH.
 
 - [x] Setup Git.
 
 - [ ] Setup Termux API.
+
+## Acknowledgements
+
+- [Termux-ohmyzsh](https://github.com/Cabbagec/termux-ohmyzsh)
