@@ -12,9 +12,6 @@ packages_install=""
 zsh_custom=${ZSH_CUSTOM:-${ZSH}/custom}
 zsh_custom_plugins=$zsh_custom/plugins
 
-echo ${packages[*]}
-echo ${editors[*]}
-
 ################ Functions ###############
 
 welcome() {
@@ -36,11 +33,11 @@ package_installed() {
 	if [ ! $# -eq 1 ]; then
 		return 1
 	fi
-	[[ $(dpkg -s $1 2> /dev/null) == *installed* ]]
+	[[ $(dpkg -s "$1" 2> /dev/null) == *installed* ]]
 }
 
 cp_backup() {
-	local bak="$*.bak.$(date +%Y.%m.%d-%H:%M:%S)"
+	local bak; bak="$*.bak.$(date +%Y.%m.%d-%H:%M:%S)"
 	echo "Backup $* to $bak..."
 	cp -r "$*" "$bak"
 }
@@ -73,7 +70,7 @@ setup_repo() {
 	echo "Would you like to choose a Termux repository first? It may"
 	echo "improve package download speed, if you haven't run"
 	echo '"termux-change-repo" yet.'
-	read -p "Choose a Termux repository? [y/N] " reply
+	read -rp "Choose a Termux repository? [y/N] " reply
 	if [[ "$reply" == [yY] ]]; then
 		termux-change-repo
 	fi
@@ -83,38 +80,38 @@ install_packages() {
 	# Choose Editors & Basic Utilities
 	echo
 	echo "Select your favorite editor (vim, neovim, emacs):"
-	for editor in ${editors[@]}; do
-		if package_installed $editor; then
+	for editor in "${editors[@]}"; do
+		if package_installed "$editor"; then
 			echo "$editor installed already."
 		else
-			read -p "Install $editor? [y/N] " reply
+			read -rp "Install $editor? [y/N] " reply
 			if [[ "$reply" == [yY] ]]; then
-				packages_install+=($editor)
+				packages_install+=("$editor")
 			fi
 		fi
 	done
 
 	echo
 	echo "Checking basic packages to install..."
-	for package in ${packages[@]}; do
-		if ! package_installed $package; then
-			packages_need+=($package)
+	for package in "${packages[@]}"; do
+		if ! package_installed "$package"; then
+			packages_need+=("$package")
 		fi
 	done
 
-	if [ -n "$packages_need" ]; then
+	if [ -n "${packages_need[*]}" ]; then
 		echo "The following basic packages need be installed:"
 		echo -e "\t$packages_need"
 		echo "Do you want to install them all or choose each one by one?"
-		read -p "Y for installing all, N for choosing. [y/N] " reply
+		read -rp "Y for installing all, N for choosing. [y/N] " reply
 		if [[ "$reply" == [yY] ]]; then
-			packages_install+=($packages_need)
+			packages_install+=("$packages_need")
 		else
 			echo -e "\nChoosing packages to install..."
 			for package in $packages_need; do
-				read -p "Do you want to install $package? [y/N] " reply
+				read -rp "Do you want to install $package? [y/N] " reply
 				if [[ "$reply" == [yY] ]]; then
-					packages_install+=($package)
+					packages_install+=("$package")
 				fi
 			done
 		fi
@@ -122,12 +119,12 @@ install_packages() {
 		echo "No basic package need to be installed."
 	fi
 
-	if [ -n "$packages_install" ]; then
+	if [ -n "${packages_install[*]}" ]; then
 		echo "The following packages will be installed (including selected editors):"
 		echo -e "\t$packages_install"
-		read -p "Continue? [y/N] " reply
+		read -rp "Continue? [y/N] " reply
 		if [[ "$reply" == [yY] ]]; then
-			pkg install $packages_install -y
+			pkg install "$packages_install" -y
 		fi
 	else
 		echo "No package will be installed."
@@ -137,7 +134,7 @@ install_packages() {
 setup_omz() {
 	echo
 	echo "Checking Oh My Zsh status..."
-	if [ -d $HOME/.oh-my-zsh ] || [ -d "$ZSH" ]; then
+	if [ -d "$HOME/.oh-my-zsh" ] || [ -d "$ZSH" ]; then
 		echo "You have Oh My Zsh installed."
 		return
 	fi
@@ -156,7 +153,7 @@ setup_omz() {
 	fi
 
 	echo "Install Oh My Zsh (based on Termux-ohmyzsh: https://github.com/Cabbagec/termux-ohmyzsh)? [y/N] "
-	read reply
+	read -r reply
 	if [[ ! "$reply" == [yY] ]]; then
 		return 1
 	fi
@@ -181,11 +178,11 @@ setup_omz() {
 
 	chsh -s zsh
 
-	echo "oh-my-zsh install complete!\nChoose your color scheme now~"
-	$HOME/.termux/colors.sh
+	echo -e "oh-my-zsh install complete!\nChoose your color scheme now~"
+	"$HOME"/.termux/colors.sh
 
 	echo "Choose your font now~"
-	$HOME/.termux/fonts.sh
+	"$HOME"/.termux/fonts.sh
 
 	echo "$HOME/termux-ohmyzsh/ is used in the installation, you can remove it now"
 	echo "You should restart Termux later~"
@@ -193,21 +190,21 @@ setup_omz() {
 
 setup_omz_plugins() {
 	echo "Checking Oh My Zsh plugins..."
-	local plugins=($zsh_custom_plugins/*)
+	local plugins; plugins=("$zsh_custom_plugins"/*)
 	local plugins_name=()
 	for plugin in "${plugins[@]}"; do
-		local name=$(basename $plugin)
-		if [ $name = "example" ]; then
+		local name; name=$(basename "$plugin")
+		if [ "$name" = "example" ]; then
 			continue
 		fi
-		plugins_name+=($name)
+		plugins_name+=("$name")
 	done
 	echo "You have following custom plugins installed:"
 	echo -e "\t${plugins_name[*]}"
 	echo "Checking recommend plugins..."
 	if ! in_array "zsh-autosuggestions" "${plugins_name[@]}"; then
 		echo "zsh-autosuggestions not installed."
-		read -p "Do you want to install it? [y/N] " reply
+		read -rp "Do you want to install it? [y/N] " reply
 		if [[ "$reply" == [yY] ]]; then
 			git clone https://github.com/zsh-users/zsh-autosuggestions.git "$zsh_custom_plugins/zsh-autosuggestions" --depth 1
 			plugins_name+=(zsh-autosuggestions)
@@ -215,7 +212,7 @@ setup_omz_plugins() {
 	fi
 	if ! in_array "zsh-z" "${plugins_name[@]}"; then
 		echo "zsh-z not installed."
-		read -p "Do you want to install it? [y/N] " reply
+		read -rp "Do you want to install it? [y/N] " reply
 		if [[ "$reply" == [yY] ]]; then
 			git clone https://github.com/agkozak/zsh-z.git "$zsh_custom_plugins/zsh-z" --depth 1
 			plugins_name+=(zsh-z)
@@ -223,7 +220,7 @@ setup_omz_plugins() {
 	fi
 	if ! in_array "zsh-syntax-highlighting" "${plugins_name[@]}"; then
 		echo "zsh-syntax-highlighting not installed."
-		read -p "Do you want to install it? [y/N] " reply
+		read -rp "Do you want to install it? [y/N] " reply
 		if [[ "$reply" == [yY] ]]; then
 			git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "$zsh_custom_plugins/zsh-syntax-highlighting" --depth 1
 			plugins_name+=(zsh-syntax-highlighting)
@@ -232,14 +229,14 @@ setup_omz_plugins() {
 
 	echo "You have following custom plugins installed now:"
 	echo -e "\t${plugins_name[*]}"
-	read -p "Do you want to enable them all (you can tweak in ~/.zshrc later)? [y/N] " reply
+	read -rp "Do you want to enable them all (you can tweak in ~/.zshrc later)? [y/N] " reply
 	if [[ "$reply" == [yY] ]]; then
 		# this will override previous difination
-		eval $(grep "^plugins=(.*)$" ~/.zshrc)
-		plugins+=(${plugins_name[@]})
-		plugins=$(remove_array_dups "${plugins[@]}")
+		eval "$(grep "^plugins=(.*)$" ~/.zshrc)"
+		plugins+=("${plugins_name[@]}")
+		read -ra plugins <<< "$(remove_array_dups "${plugins[@]}")"
 
-		# zsh-syntax-highlighting should always be the last plugin
+		# zsh-syntax-highlighting must be the last plugin
 		for ((i = 0; i < ${#plugins[@]}; ++i)); do
 			if [ "${plugins[i]}" = "zsh-syntax-highlighting" ]; then
 				plugins[$i]="${plugins[-1]}"
@@ -249,7 +246,7 @@ setup_omz_plugins() {
 		done
 
 		cp_backup ~/.zshrc
-		sed -i "s/^plugins=(.*)$/plugins=(${plugins})/" ~/.zshrc
+		sed -i "s/^plugins=(.*)$/plugins=(${plugins[*]})/" ~/.zshrc
 		echo "Complete enabling."
 	fi
 }
@@ -264,13 +261,13 @@ setup_ssh() {
 
 	echo "You have OpenSSH installed."
 	echo "Checking key pairs..."
-	if ls $HOME/.ssh/id_* &> /dev/null; then
+	if ls "$HOME"/.ssh/id_* &> /dev/null; then
 		echo "It seems that you already have some key pairs."
 	else
 		echo "It seems that you don't have any key pairs."
-		read -p "Would you like to generate one (Using Ed25519)? [y/N] " reply
+		read -rp "Would you like to generate one (Using Ed25519)? [y/N] " reply
 		if [[ "$reply" == [yY] ]]; then
-			read -p "Enter comment for your key, email is recommended. Leave blank to use default comment: " comment
+			read -rp "Enter comment for your key, email is recommended. Leave blank to use default comment: " comment
 			if [ -n "$comment" ]; then
 				ssh-keygen -t ed25519 -C "$comment"
 			else
@@ -294,7 +291,7 @@ setup_git() {
 		echo "Default branch set."
 	else
 		echo "Default branch not set."
-		read -p "Please enter default branch name (leave blank to skip): " reply
+		read -rp "Please enter default branch name (leave blank to skip): " reply
 		if [ -n "$reply" ]; then
 			git config --global init.defaultBranch "$reply"
 		fi
@@ -303,7 +300,7 @@ setup_git() {
 		echo "User email set."
 	else
 		echo "User email not set."
-		read -p "Please enter your email (leave blank to skip): " reply
+		read -rp "Please enter your email (leave blank to skip): " reply
 		if [ -n "$reply" ]; then
 			git config --global user.email "$reply"
 		fi
@@ -312,7 +309,7 @@ setup_git() {
 		echo "User name set."
 	else
 		echo "User name not set."
-		read -p "Please enter your name (leave blank to skip): " reply
+		read -rp "Please enter your name (leave blank to skip): " reply
 		if [ -n "$reply" ]; then
 			git config --global user.name "$reply"
 		fi
