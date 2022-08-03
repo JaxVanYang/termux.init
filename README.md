@@ -26,7 +26,7 @@ Set up your Termux on the fly.
 
 - [x] Setup Git.
 
-- [ ] Setup Termux API.
+- [x] Backup & restore Termux.
 
 ## Acknowledgements
 
