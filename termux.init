@@ -5,10 +5,10 @@ set -e
 
 ################ Initialize Variables ################
 packages=(curl wget git tree build-essential openssh \
-	dnsutils iproute2 zsh shtool)
+	dnsutils iproute2 zsh shtool manpages)
 editors=(vim neovim emacs)
-packages_need=""
-packages_install=""
+packages_need=()
+packages_install=()
 zsh_custom=${ZSH_CUSTOM:-${ZSH}/custom}
 zsh_custom_plugins=$zsh_custom/plugins
 
@@ -101,14 +101,14 @@ install_packages() {
 
 	if [ -n "${packages_need[*]}" ]; then
 		echo "The following basic packages need be installed:"
-		echo -e "\t$packages_need"
+		echo -e "\t${packages_need[*]}"
 		echo "Do you want to install them all or choose each one by one?"
 		read -rp "Y for installing all, N for choosing. [y/N] " reply
 		if [[ "$reply" == [yY] ]]; then
 			packages_install+=("$packages_need")
 		else
 			echo -e "\nChoosing packages to install..."
-			for package in $packages_need; do
+			for package in "${packages_need[@]}"; do
 				read -rp "Do you want to install $package? [y/N] " reply
 				if [[ "$reply" == [yY] ]]; then
 					packages_install+=("$package")
@@ -121,7 +121,7 @@ install_packages() {
 
 	if [ -n "${packages_install[*]}" ]; then
 		echo "The following packages will be installed (including selected editors):"
-		echo -e "\t$packages_install"
+		echo -e "\t${packages_install[*]}"
 		read -rp "Continue? [y/N] " reply
 		if [[ "$reply" == [yY] ]]; then
 			pkg install "$packages_install" -y
