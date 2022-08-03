@@ -340,9 +340,9 @@ restore_termux() {
 	echo
 	echo "If you have created backup file using this script, you can"
 	echo "restore your Termux with that. This process use tar command"
-	echo "to restore files, any existing file with same name will be"
-	echo "overridden. Therefore, this process may break the system"
-	echo "dependencies."
+	echo "to restore files, any file under \$PREFIX/ or \$HOME will"
+	echo "will be overridden."
+	echo "MAKE SURE THAT YOU KNOW WHAT YOU ARE DOING!!!"
 
 	read -rp "Do you want to continue? [y/N] " reply
 	if [[ "$reply" != [yY] ]]; then
@@ -367,8 +367,8 @@ backup_termux() {
 
 	echo
 	echo "Do you want to backup your Termux? This process use tar"
-	echo "command to full backup all the files under \$PREFIX and"
-	echo "\$HOME. You can restore it later."
+	echo "command to full backup all the files under \$PREFIX/ and"
+	echo "\$HOME/. You can restore it later."
 
 	read -rp "Do you want to continue? [y/N] " reply
 	if [[ "$reply" != [yY] ]]; then
