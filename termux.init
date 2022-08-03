@@ -11,23 +11,11 @@ packages_need=()
 packages_install=()
 zsh_custom=${ZSH_CUSTOM:-${ZSH}/custom}
 zsh_custom_plugins=$zsh_custom/plugins
+BACKUP_FILE="/sdcard/backups/termux-backup.tar.gz"
 
 ################ Functions ###############
 
-welcome() {
-	echo "################ Welcome to termux.init ################"
-	echo
-	echo "This script helps you to quickly set up your Termux with:"
-	echo -e "\t1. Termux repository,"
-	echo -e "\t2. Editors & basic utilities,"
-	echo -e "\t3. Oh My Zsh,"
-	echo -e "\t4. And so on..."
-	echo "It aims to make a development environment you can jump"
-	echo "into right away. Its basic function is installing packages."
-	echo "You should try it if you want to install basic packages"
-	echo "by choosing options rather than manually install them"
-	echo "one by one."
-}
+# Helper Functions
 
 package_installed() {
 	if [ ! $# -eq 1 ]; then
@@ -63,6 +51,35 @@ remove_array_dups() {
 	done
 
 	echo "${!tmp_array[@]}"
+}
+
+termux_full_backup() {
+	local backup_file
+	[[ $# -eq 0 ]] && backup_file="$BACKUP_FILE" || backup_file="$*"
+	tar zcvf "$backup_file" -C /data/data/com.termux/files ./home ./usr
+}
+
+termux_full_restore() {
+	local backup_file
+	[[ $# -eq 0 ]] && backup_file="BACKUP_FILE" || backup_file="$*"
+	tar zxvf "$backup_file" -C /data/data/com.termux/files --recursive-unlink --preserve-permissions
+}
+
+# Feature Functions
+
+welcome() {
+	echo "################ Welcome to termux.init ################"
+	echo
+	echo "This script helps you to quickly set up your Termux with:"
+	echo -e "\t1. Termux repository,"
+	echo -e "\t2. Editors & basic utilities,"
+	echo -e "\t3. Oh My Zsh,"
+	echo -e "\t4. And so on..."
+	echo "It aims to make a development environment you can jump"
+	echo "into right away. Its basic function is installing packages."
+	echo "You should try it if you want to install basic packages"
+	echo "by choosing options rather than manually install them"
+	echo "one by one."
 }
 
 setup_repo() {
@@ -316,8 +333,78 @@ setup_git() {
 	fi
 }
 
+restore_termux() {
+	local reply
+	local backup_file
+
+	echo
+	echo "If you have created backup file using this script, you can"
+	echo "restore your Termux with that. This process use tar command"
+	echo "to restore files, any existing file with same name will be"
+	echo "overridden. Therefore, this process may break the system"
+	echo "dependencies."
+
+	read -rp "Do you want to continue? [y/N] " reply
+	if [[ "$reply" != [yY] ]]; then
+		return
+	fi
+
+	echo "The default backup file path is \"$BACKUP_FILE\"."
+	echo "Please enter the path to your backup file (leave blank"
+	read -rp "to use default): " reply
+	[[ -n "$reply" ]] && backup_file="$reply" || backup_file="$BACKUP_FILE"
+	if [ -r "$backup_file" ]; then
+		termux_full_restore "$backup_file"
+	else
+		echo "\"$backup_file\" doesn't exist or unreadable."
+		echo "Restore termux skiped."
+	fi
+}
+
+backup_termux() {
+	local reply
+	local backup_file
+
+	echo
+	echo "Do you want to backup your Termux? This process use tar"
+	echo "command to full backup all the files under \$PREFIX and"
+	echo "\$HOME. You can restore it later."
+
+	read -rp "Do you want to continue? [y/N] " reply
+	if [[ "$reply" != [yY] ]]; then
+		return
+	fi
+
+	echo "The default backup file path is \"$BACKUP_FILE\"."
+	echo "For technical reasons of tar, you can only place backup"
+	echo "file outside Termux private directories (e.g. /sdcard/)."
+	echo "Please enter the place you want to put the backup"
+	read -rp "file (leave blank to use default): " reply
+	if [ -z "$reply" ]; then
+		backup_file="$BACKUP_FILE"
+	elif [[ "$reply" == */ ]]; then
+		backup_file="${reply}$(basename $BACKUP_FILE)"
+	else
+		backup_file="$reply"
+	fi
+
+	echo "The final path of backup file is \"$backup_file\"."
+	if [[ "$backup_file" != /sdcard/* ]]; then
+		echo "The path you choose doesn't begin with \"/sdcard/\"."
+		read -rp "Are you sure with this? [y/N] " reply
+		if [[ "$reply" != [yY] ]]; then
+			echo "Backup termux skiped"
+			return
+		fi
+	fi
+
+	termux_full_backup "$backup_file"
+}
+
 main() {
 	welcome
+
+	restore_termux
 
 	setup_repo
 	install_packages
@@ -329,6 +416,8 @@ main() {
 
 	setup_ssh
 	setup_git
+
+	backup_termux
 }
 
 main "$@"
